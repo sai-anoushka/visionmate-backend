@@ -4,3 +4,4 @@ fastapi
 uvicorn
 pillow
 python-multipart
+accelerate>=0.20.3
