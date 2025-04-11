@@ -1,13 +1,11 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
 import requests
 import io
-import base64
+import os
 
 app = FastAPI()
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,38 +14,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Hugging Face Inference API details
 API_URL = "https://api-inference.huggingface.co/models/microsoft/git-base-coco"
-import os
-
 HF_TOKEN = os.getenv("HF_TOKEN")
+
 HEADERS = {
-    "Authorization": f"Bearer {HF_TOKEN}"
+    "Authorization": f"Bearer {HF_TOKEN}",
+    "Content-Type": "application/octet-stream"
 }
 
-
 @app.get("/")
-def read_root():
-    return {"message": "VisionMate API (HF-powered) is running!"}
+def root():
+    return {"message": "VisionMate API (HF Inference) is running!"}
 
 @app.post("/caption/")
 async def generate_caption(file: UploadFile = File(...)):
-    print("📥 Received image upload request")
+    image_bytes = await file.read()
 
-    # Read image and encode it to base64
-    image = Image.open(io.BytesIO(await file.read())).convert("RGB")
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_bytes = buffered.getvalue()
-
-    print("🖼️ Sending image to Hugging Face Inference API...")
-    response = requests.post(API_URL, headers=HEADERS, data=img_bytes)
+    print("📤 Sending to Hugging Face API...")
+    response = requests.post(API_URL, headers=HEADERS, data=image_bytes)
 
     try:
         result = response.json()
-        caption = result[0]["generated_text"]
-        print("📝 Caption:", caption)
-        return {"caption": caption}
+        return {"caption": result[0]["generated_text"]}
     except Exception as e:
         print("❌ Error:", e)
-        return {"error": "Something went wrong with the inference request."}
+        return {"error": "Failed to get caption"}

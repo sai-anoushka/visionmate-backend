@@ -1,7 +1,4 @@
-transformers==4.36.2
-torch
 fastapi
 uvicorn
-pillow
+requests
 python-multipart
-accelerate==0.25.0
