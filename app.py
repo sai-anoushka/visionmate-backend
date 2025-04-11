@@ -1,56 +1,53 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-from transformers import GitProcessor, AutoModelForCausalLM
-import torch
+import requests
 import io
-
-
+import base64
 
 app = FastAPI()
 
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Hugging Face Inference API details
+API_URL = "https://api-inference.huggingface.co/models/microsoft/git-base-coco"
+import os
 
+HF_TOKEN = os.getenv("HF_TOKEN")
+HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
 
-# Load GIT-base model and processor
-print("🚀 Loading microsoft/git-base-coco model...")
-processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
-model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco", torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32)
-print("✅ Model loaded!")
 
 @app.get("/")
 def read_root():
-    return {"message": "VisionMate API is running!"}
+    return {"message": "VisionMate API (HF-powered) is running!"}
 
 @app.post("/caption/")
 async def generate_caption(file: UploadFile = File(...)):
     print("📥 Received image upload request")
-    
-    # Read and process image
+
+    # Read image and encode it to base64
     image = Image.open(io.BytesIO(await file.read())).convert("RGB")
-    print("🖼️ Image processed")
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_bytes = buffered.getvalue()
 
-    # Provide a better prompt to guide caption generation
-    prompt = "a photo of"
-    inputs = processor(images=image, text=prompt, return_tensors="pt")
+    print("🖼️ Sending image to Hugging Face Inference API...")
+    response = requests.post(API_URL, headers=HEADERS, data=img_bytes)
 
-    print("🤖 Generating caption...")
-    output_ids = model.generate(**inputs, max_new_tokens=50)  # increased length
-    caption = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
-
-    print("📝 Caption generated:", caption)
-    return {"caption": caption}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7860)
-
+    try:
+        result = response.json()
+        caption = result[0]["generated_text"]
+        print("📝 Caption:", caption)
+        return {"caption": caption}
+    except Exception as e:
+        print("❌ Error:", e)
+        return {"error": "Something went wrong with the inference request."}
